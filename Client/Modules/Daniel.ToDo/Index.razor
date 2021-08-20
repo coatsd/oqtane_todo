@@ -1,0 +1,77 @@
+@using Daniel.ToDo.Services
+@using Daniel.ToDo.Models
+
+@namespace Daniel.ToDo
+@inherits ModuleBase
+@inject IToDoService ToDoService
+@inject NavigationManager NavigationManager
+@inject IStringLocalizer<Index> Localizer
+
+@if (_ToDos == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <ActionLink Action="Add" Security="SecurityAccessLevel.Edit" Text="Add ToDo" ResourceKey="Add" />
+    <br />
+    <br />
+    @if (@_ToDos.Count != 0)
+    {
+        <Pager Items="@_ToDos">
+            <Header>
+                <th style="width: 1px;">&nbsp;</th>
+                <th style="width: 1px;">&nbsp;</th>
+                <th>@Localizer["Name"]</th>
+            </Header>
+            <Row>
+                <td><ActionLink Action="Edit" Parameters="@($"id=" + context.ToDoId.ToString())" ResourceKey="Edit"  /></td>
+                <td><ActionDialog Header="Delete ToDo" Message="@("Are You Sure You Wish To Delete The " + context.Name + " ToDo?")" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete"  /></td>
+                <td>@context.Name</td>
+            </Row>
+        </Pager>
+    }
+    else
+    {
+        <p>@Localizer["Message.DisplayNone"]</p>
+    }
+}
+
+@code {
+    public override List<Resource> Resources => new List<Resource>()
+    {
+        new Resource { ResourceType = ResourceType.Stylesheet, Url = ModulePath() + "Module.css" },
+        new Resource { ResourceType = ResourceType.Script, Url = ModulePath() + "Module.js" }
+    };
+
+    List<ToDo> _ToDos;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _ToDos = await ToDoService.GetToDosAsync(ModuleState.ModuleId);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading ToDo {Error}", ex.Message);
+            AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private async Task Delete(ToDo ToDo)
+    {
+        try
+        {
+            await ToDoService.DeleteToDoAsync(ToDo.ToDoId, ModuleState.ModuleId);
+            await logger.LogInformation("ToDo Deleted {ToDo}", ToDo);
+            _ToDos = await ToDoService.GetToDosAsync(ModuleState.ModuleId);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Deleting ToDo {ToDo} {Error}", ToDo, ex.Message);
+            AddModuleMessage(Localizer["Message.DeleteError"], MessageType.Error);
+        }
+    }
+}

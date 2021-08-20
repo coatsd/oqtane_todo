@@ -1,0 +1,114 @@
+@using Oqtane.Modules.Controls
+@using Daniel.ToDo.Services
+@using Daniel.ToDo.Models
+
+@namespace Daniel.ToDo
+@inherits ModuleBase
+@inject IToDoService ToDoService
+@inject NavigationManager NavigationManager
+@inject IStringLocalizer<Edit> Localizer
+
+<form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
+<table class="table table-borderless">
+    <tr>
+        <td>
+            <Label For="name" HelpText="Enter a name" ResourceKey="Name">Name: </Label>
+        </td>
+        <td>
+            <input id="name" class="form-control" @bind="@_name" required />
+        </td>
+    </tr>
+</table>
+<button type="button" class="btn btn-success" @onclick="Save">@Localizer["Save"]</button>
+<NavLink class="btn btn-secondary" href="@NavigateUrl()">@Localizer["Cancel"]</NavLink>
+<br /><br />
+@if (PageState.Action == "Edit")
+{
+    <AuditInfo CreatedBy="@_createdby" CreatedOn="@_createdon" ModifiedBy="@_modifiedby" ModifiedOn="@_modifiedon"></AuditInfo>
+}
+</form>
+
+@code {
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
+
+    public override string Actions => "Add,Edit";
+
+    public override string Title => "Manage ToDo";
+
+    public override List<Resource> Resources => new List<Resource>()
+    {
+        new Resource { ResourceType = ResourceType.Stylesheet, Url = ModulePath() + "Module.css" }
+    };
+
+    private ElementReference form;
+    private bool validated = false;
+
+    private int _id;
+    private string _name;
+    private string _createdby;
+    private DateTime _createdon;
+    private string _modifiedby;
+    private DateTime _modifiedon;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (PageState.Action == "Edit")
+            {
+                _id = Int32.Parse(PageState.QueryString["id"]);
+                ToDo ToDo = await ToDoService.GetToDoAsync(_id, ModuleState.ModuleId);
+                if (ToDo != null)
+                {
+                    _name = ToDo.Name;
+                    _createdby = ToDo.CreatedBy;
+                    _createdon = ToDo.CreatedOn;
+                    _modifiedby = ToDo.ModifiedBy;
+                    _modifiedon = ToDo.ModifiedOn;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading ToDo {ToDoId} {Error}", _id, ex.Message);
+            AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private async Task Save()
+    {
+        try
+        {
+            validated = true;
+            var interop = new Oqtane.UI.Interop(JSRuntime);
+            if (await interop.FormValid(form))
+            {
+                if (PageState.Action == "Add")
+                {
+                    ToDo ToDo = new ToDo();
+                    ToDo.ModuleId = ModuleState.ModuleId;
+                    ToDo.Name = _name;
+                    ToDo = await ToDoService.AddToDoAsync(ToDo);
+                    await logger.LogInformation("ToDo Added {ToDo}", ToDo);
+                }
+                else
+                {
+                    ToDo ToDo = await ToDoService.GetToDoAsync(_id, ModuleState.ModuleId);
+                    ToDo.Name = _name;
+                    await ToDoService.UpdateToDoAsync(ToDo);
+                    await logger.LogInformation("ToDo Updated {ToDo}", ToDo);
+                }
+                NavigationManager.NavigateTo(NavigateUrl());
+            }
+            else
+            {
+                AddModuleMessage(Localizer["Message.SaveValidation"], MessageType.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Saving ToDo {Error}", ex.Message);
+            AddModuleMessage(Localizer["Message.SaveError"], MessageType.Error);
+        }
+    }
+}
